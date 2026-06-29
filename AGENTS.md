@@ -191,6 +191,8 @@ This file defines specialized LLM coding-agent roles for migrating `termux_flutt
 
 **Role:** Owns Flutter terminal rendering, selection, scrollback, cursor, gestures, and viewport performance.
 
+**Phase 3 completion note:** Implemented the emulator-driven Flutter renderer in `lib/terminal/terminal_widget.dart` with `lib/ui/terminal_view.dart` as the Phase 3 export path, plus `lib/core/terminal_style.dart`, `lib/core/glyph_width.dart`, renderer tests, and `benchmark_test/terminal_render_bench.dart`. Root cause was the old painter flattening emulator state into fixed-metric line cells, losing transcript-aware row math, run-level attributes, cursor mode, and selection coordinates. Source reference: `termux-app/terminal-view/src/main/java/com/termux/view/TerminalRenderer.java`, `TerminalView.java`, and terminal-emulator `TerminalBuffer.java`/`TerminalRow.java`. Validation command: `flutter test test/glyph_width_test.dart test/terminal_style_test.dart`.
+
 **Responsibilities:**
 
 - Replace naive `CustomPainter` row painting with a terminal renderer aligned to emulator state.

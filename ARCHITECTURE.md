@@ -11,10 +11,13 @@ Current Flutter implementation:
 - `lib/core/terminal/terminal_emulator.dart` parses PTY bytes into a renderer-neutral VT100/xterm screen model.
 - `lib/core/terminal/screen_model.dart`, `screen_cell.dart`, `text_attributes.dart`, and `color_attribute.dart` store terminal cells, attributes, cursor, scroll margins, scrollback, and alternate screen state without Flutter dependencies.
 - `lib/core/terminal/wc_width.dart` provides Unicode width behavior for ASCII, combining marks, CJK, and emoji.
-- `lib/terminal/terminal_emulator_adapter.dart` adapts the new core model into the existing Flutter `TerminalBuffer` painter bridge until the Phase 3 renderer replaces it.
+- `lib/core/glyph_width.dart` exposes the Phase 3 glyph-width facade used by renderer tests.
+- `lib/core/terminal_style.dart` maps renderer-neutral terminal attributes to Flutter text/background style runs.
+- `lib/terminal/terminal_emulator_adapter.dart` owns the Dart emulator instance and still keeps a legacy `TerminalBuffer` mirror for compatibility.
 - `lib/terminal/ansi_parser.dart` remains as a legacy reference but is no longer on the live terminal output path.
 - `lib/terminal/terminal_buffer.dart` stores simple lines/cells for the current painter adapter.
-- `lib/terminal/terminal_widget.dart` renders with `CustomPainter`, uses a hidden `EditableText` for Android IME, and forwards input to the controller.
+- `lib/terminal/terminal_widget.dart` renders directly from `ScreenModel` and scrollback rows with `CustomPainter`, uses a hidden `EditableText` for Android IME, and forwards input to the controller.
+- `lib/ui/terminal_view.dart` exports the Phase 3 terminal view surface for callers expecting the UI-layer path.
 - `android/app/src/main/java/com/termux/flutter/MainActivity.java` registers the platform channels and a legacy Android mouse-cursor workaround.
 - `android/app/src/main/java/com/termux/flutter/ShellEngine.java` starts the process through `BootstrapInstaller`, `PtyProcess`, and pipe fallback.
 - `android/app/src/main/java/com/termux/flutter/BootstrapInstaller.java` expects ABI-specific bootstrap archives under `android/app/src/main/assets/bootstrap/`.
@@ -55,8 +58,7 @@ flowchart TD
     EC --> EMU[lib/core/terminal TerminalEmulator]
     EMU --> SMODEL[ScreenModel and ScreenCell grid]
     SMODEL --> ADAPT[terminal_emulator_adapter.dart]
-    ADAPT --> TB[TerminalBuffer.dart]
-    TB --> TP[CustomPainter in TerminalWidget]
+    ADAPT --> TP[TerminalPainter in TerminalWidget]
 ```
 
 Target Termux-equivalent architecture:
@@ -129,6 +131,8 @@ Failure points in this flow:
 | `TerminalController` | Starts shell, receives output, forwards input | `lib/terminal/terminal_controller.dart` | `TerminalSession.java` |
 | `TerminalEmulator` | VT100/xterm parser and screen state | `lib/core/terminal/terminal_emulator.dart` | `TerminalEmulator.java` |
 | `ScreenModel` | Renderer-neutral cells, cursor, scrollback, margins | `lib/core/terminal/screen_model.dart` | `TerminalBuffer.java`, `TerminalRow.java` |
+| `TerminalPainter` | Flutter renderer for screen, scrollback, selection, cursor, scrollbar | `lib/terminal/terminal_widget.dart` | `TerminalRenderer.java`, `TerminalView.java` |
+| `StyleDecoder` | Converts terminal attributes/colors into Flutter style runs | `lib/core/terminal_style.dart` | `TextStyle.java`, `TerminalRenderer.java` |
 | `AnsiParser` | Legacy minimal ANSI parser, no longer live output path | `lib/terminal/ansi_parser.dart` | `TerminalEmulator.java` |
 | `TerminalBuffer` | Minimal line/cell buffer | `lib/terminal/terminal_buffer.dart` | `TerminalBuffer.java`, `TerminalRow.java` |
 | `ShellBridge` | Dart MethodChannel/EventChannel wrapper | `lib/platform/shell_bridge.dart` | Not applicable; upstream is direct Java |
@@ -246,3 +250,15 @@ Decision: normal interactive sessions now require native PTY startup through `an
 Source reference: `termux-app/terminal-emulator/src/main/jni/termux.c` and `TerminalSession.java`.
 
 Validation command: `cd android && gradlew.bat :app:connectedAndroidTest`.
+
+## Rendering Engine (Phase 3)
+
+Root cause: after Phase 2 the emulator had a renderer-neutral `ScreenModel`, but the Flutter view still painted a flattened `TerminalBuffer` mirror with hard-coded cell metrics, per-cell `TextPainter` work, `SingleChildScrollView` line math, and a timer cursor. That design lost emulator scrollback semantics and could not represent selection, cursor shape, blink state, faint/inverse/blink attributes, or wide-glyph cell alignment accurately.
+
+Decision: the live terminal view now renders from `TerminalController.screen`, which exposes the current Dart `ScreenModel` and its `scrollbackBuffer`. `TerminalPainter` walks transcript-relative rows with `topRow`, groups adjacent cells into style runs, resolves colors through `StyleDecoder`, scales glyph runs to terminal cell width when font measurement differs from `wcwidth`, paints selection highlights in cell coordinates, and draws block, underline, or bar cursor shapes from emulator cursor state. `TerminalScrollController` owns clamped transcript offset, fling updates, scrollbar visibility, and scroll-to-bottom behavior. `SelectionController` stores `(row, col)` ranges, supports word selection, drag handles, copy, and paste through Flutter clipboard APIs. Font scaling is handled in the gesture layer and persisted with `shared_preferences` under `termux_flutter.terminal.font_size`.
+
+Boundary: rendering remains pure Dart/Flutter. Phase 3 does not introduce platform channels, native code, PTY lifecycle changes, bootstrap changes, package-manager behavior, or keyboard-system parity beyond preserving the existing text and arrow-key input path. The legacy `TerminalBuffer` mirror remains only for compatibility with older tests or callers; new rendering code should consume `ScreenModel`, `ScreenCell`, `TextAttributes`, and `ColorAttribute` directly.
+
+Source reference: upstream `termux-app/terminal-view/src/main/java/com/termux/view/TerminalRenderer.java`, `TerminalView.java`, `TextSelectionCursorController.java`, plus `terminal-emulator` `TerminalBuffer.java` and `TerminalRow.java`.
+
+Validation commands: `flutter test test/glyph_width_test.dart test/terminal_style_test.dart`, `flutter analyze`, and profile benchmark command `flutter drive --profile --target=benchmark_test/terminal_render_bench.dart`.

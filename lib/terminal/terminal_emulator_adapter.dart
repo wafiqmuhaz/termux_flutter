@@ -12,18 +12,32 @@ import 'terminal_buffer.dart';
 final class TerminalEmulatorAdapter implements ScreenModelListener {
   TerminalEmulatorAdapter({int columns = 80, int rows = 24})
     : buffer = TerminalBuffer(maxLines: rows),
-      emulator = TerminalEmulator(columns: columns, rows: rows) {
-    emulator.primaryScreen.addListener(this);
-    emulator.alternateScreen.addListener(this);
-    _sync(emulator.screen);
+      _columns = columns,
+      _rows = rows {
+    _emulator = _createEmulator(columns, rows);
+    _attach();
   }
 
   final TerminalBuffer buffer;
-  final TerminalEmulator emulator;
+  late TerminalEmulator _emulator;
+  int _columns;
+  int _rows;
+
+  TerminalEmulator get emulator => _emulator;
 
   void accept(String chunk) {
     emulator.processInput(Uint8List.fromList(chunk.codeUnits));
     _sync(emulator.screen);
+  }
+
+  void resize(int columns, int rows) {
+    if (columns == _columns && rows == _rows) return;
+    emulator.primaryScreen.removeListener(this);
+    emulator.alternateScreen.removeListener(this);
+    _columns = columns;
+    _rows = rows;
+    _emulator = _createEmulator(columns, rows);
+    _attach();
   }
 
   @override
@@ -46,6 +60,16 @@ final class TerminalEmulatorAdapter implements ScreenModelListener {
       cursorRow: screen.cursorRow,
       cursorCol: screen.cursorCol,
     );
+  }
+
+  TerminalEmulator _createEmulator(int columns, int rows) {
+    return TerminalEmulator(columns: columns, rows: rows);
+  }
+
+  void _attach() {
+    emulator.primaryScreen.addListener(this);
+    emulator.alternateScreen.addListener(this);
+    _sync(emulator.screen);
   }
 
   TextStyle _styleFor(ScreenCell cell) {

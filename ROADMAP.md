@@ -52,16 +52,18 @@
 
 **Goal:** Build a Flutter terminal view that matches Termux rendering, selection, scrolling, gestures, and performance.
 
-- [ ] P1 — Replace line-list `CustomPainter` assumptions with emulator screen rows and transcript rows.
-- [ ] P2 — Implement xterm text attributes: bold, faint, italic, underline, inverse, strike, foreground, and background.
-- [ ] P3 — Implement cursor shape, blink, visibility, and alternate cursor state.
-- [ ] P4 — Implement scrollback viewport, fling, scrollbar, and scroll-to-bottom behavior.
-- [ ] P5 — Implement long-press text selection, drag handles, copy, paste, and word selection.
-- [ ] P6 — Implement pinch font scaling and persistent font size settings.
-- [ ] P7 — Validate glyph metrics for ASCII, CJK, emoji, and box drawing.
-- [ ] P8 — Add rendering performance benchmarks under high output throughput.
+- [x] P1 — Replace line-list `CustomPainter` assumptions with emulator screen rows and transcript rows.
+- [x] P2 — Implement xterm text attributes: bold, faint, italic, underline, inverse, strike, foreground, and background.
+- [x] P3 — Implement cursor shape, blink, visibility, and alternate cursor state.
+- [x] P4 — Implement scrollback viewport, fling, scrollbar, and scroll-to-bottom behavior.
+- [x] P5 — Implement long-press text selection, drag handles, copy, paste, and word selection.
+- [x] P6 — Implement pinch font scaling and persistent font size settings.
+- [x] P7 — Validate glyph metrics for ASCII, CJK, emoji, and box drawing.
+- [x] P8 — Add rendering performance benchmarks under high output throughput.
 
 **Success Criteria:** The Flutter terminal view can render upstream emulator state at interactive frame rates with correct selection, cursor, scrollback, and glyph alignment.
+
+**Implementation note:** Phase 3 replaces the legacy line-list painter with an emulator-driven Flutter renderer in `lib/terminal/terminal_widget.dart` and a compatibility export in `lib/ui/terminal_view.dart`. It adds `lib/core/terminal_style.dart`, `lib/core/glyph_width.dart`, focused tests, persistent font scaling through `shared_preferences`, and `benchmark_test/terminal_render_bench.dart`. Root cause was renderer state being flattened into `TerminalBuffer` lines with fixed cell metrics, per-cell painting, and widget scroll math that ignored emulator scrollback. Source references: upstream `TerminalRenderer.java`, `TerminalView.java`, `TerminalBuffer.java`, and `TerminalRow.java`. Validation commands: `flutter test test/glyph_width_test.dart test/terminal_style_test.dart` and `flutter analyze`.
 
 ### PHASE 4 — Bootstrap Filesystem & Package Manager Bridge
 

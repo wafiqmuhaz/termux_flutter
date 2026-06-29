@@ -16,7 +16,7 @@ android {
     compileSdkVersion flutter.compileSdkVersion
 
     defaultConfig {
-        applicationId "com.termux.flutter"
+        applicationId "com.termux"
         minSdkVersion legacyDeviceMinSdk
         targetSdkVersion flutter.targetSdkVersion
         versionCode 1
