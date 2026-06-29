@@ -157,6 +157,8 @@ This file defines specialized LLM coding-agent roles for migrating `termux_flutt
 
 **Role:** Owns VT100/xterm emulation and screen model parity.
 
+**Phase 2 completion note:** Evaluated `xterm 4.0.0` and selected a Termux-inspired pure Dart emulator because Phase 2 requires project-owned renderer-neutral cells and callbacks. Implemented `lib/core/terminal/terminal_emulator.dart`, `screen_model.dart`, `screen_cell.dart`, `text_attributes.dart`, `color_attribute.dart`, `wc_width.dart`, `terminal_keys.dart`, `alternate_screen.dart`, and the bridge adapter in `lib/terminal/terminal_emulator_adapter.dart`. Root cause was the old `AnsiParser` handling only a small CSI/SGR subset while storing Flutter rendering state. Source reference: `termux-app/terminal-emulator/src/main/java/com/termux/terminal/TerminalEmulator.java`, `TerminalBuffer.java`, `WcWidth.java`, and upstream terminal-emulator tests. Validation command: `flutter test test/terminal/ --reporter=expanded`.
+
 **Responsibilities:**
 
 - Replace or extend `AnsiParser` with a real emulator.
@@ -168,6 +170,8 @@ This file defines specialized LLM coding-agent roles for migrating `termux_flutt
 
 - `lib/terminal/ansi_parser.dart`
 - `lib/terminal/terminal_buffer.dart`
+- `lib/core/terminal/`
+- `test/terminal/`
 - `termux-app/terminal-emulator/src/main/java/com/termux/terminal/TerminalEmulator.java`
 - `termux-app/terminal-emulator/src/test/java/com/termux/terminal/`
 

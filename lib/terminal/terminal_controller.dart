@@ -3,16 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../platform/shell_bridge.dart';
-import 'ansi_parser.dart';
 import 'terminal_buffer.dart';
+import 'terminal_emulator_adapter.dart';
 
 class TerminalController extends ChangeNotifier {
-  TerminalController(this.bridge) : parser = AnsiParser(TerminalBuffer()) {
+  TerminalController(this.bridge) : parser = TerminalEmulatorAdapter() {
     buffer.addListener(notifyListeners);
   }
 
   final ShellBridge bridge;
-  final AnsiParser parser;
+  final TerminalEmulatorAdapter parser;
   StreamSubscription<String>? _subscription;
 
   TerminalBuffer get buffer => parser.buffer;

@@ -28,6 +28,19 @@ class TerminalBuffer extends ChangeNotifier {
 
   List<TerminalLine> get lines => List<TerminalLine>.unmodifiable(_lines);
 
+  void replaceFromScreen({
+    required List<List<TerminalCell>> rows,
+    required int cursorRow,
+    required int cursorCol,
+  }) {
+    _lines
+      ..clear()
+      ..addAll(rows.map((row) => TerminalLine(List<TerminalCell>.of(row))));
+    this.cursorRow = cursorRow;
+    this.cursorCol = cursorCol;
+    notifyListeners();
+  }
+
   void writeText(String text) {
     for (final int rune in text.runes) {
       if (rune == 10) {

@@ -35,16 +35,18 @@
 
 **Goal:** Replace the minimal ANSI parser with a tested VT100/xterm emulator compatible with Termux workloads.
 
-- [ ] P1 — Evaluate `xterm` Flutter package against upstream `TerminalEmulator` tests.
-- [ ] P2 — Decide between adopting `xterm` or porting `TerminalEmulator.java` behavior to Dart.
-- [ ] P3 — Support CSI, OSC, DCS, APC, ESC charset selection, SGR, scroll regions, and alternate screen.
-- [ ] P4 — Support xterm title changes, clipboard sequences policy, bell, cursor styles, and bracketed paste.
-- [ ] P5 — Support 8/16/256 color and truecolor attributes.
-- [ ] P6 — Support Unicode width and combining characters using a `WcWidth` equivalent.
-- [ ] P7 — Port upstream emulator tests into Dart.
-- [ ] P8 — Expose emulator state through a renderer-neutral screen model.
+- [x] P1 — Evaluate `xterm` Flutter package against upstream `TerminalEmulator` tests.
+- [x] P2 — Decide between adopting `xterm` or porting `TerminalEmulator.java` behavior to Dart.
+- [x] P3 — Support CSI, OSC, DCS, APC, ESC charset selection, SGR, scroll regions, and alternate screen.
+- [x] P4 — Support xterm title changes, clipboard sequences policy, bell, cursor styles, and bracketed paste.
+- [x] P5 — Support 8/16/256 color and truecolor attributes.
+- [x] P6 — Support Unicode width and combining characters using a `WcWidth` equivalent.
+- [x] P7 — Port upstream emulator tests into Dart.
+- [x] P8 — Expose emulator state through a renderer-neutral screen model.
 
 **Success Criteria:** The selected Dart emulator passes a migrated upstream terminal-emulator test suite and renders `vim`, `nano`, `less`, `top`, and shell prompts without sequence corruption.
+
+**Implementation note:** Phase 2 selected a Termux-inspired pure Dart emulator after evaluating `xterm 4.0.0`; see `decision_emulator.md`. The new core lives in `lib/core/terminal/` with renderer-neutral `ScreenModel`/`ScreenCell` types, parser-state handling for CSI/OSC/DCS/APC, SGR color attributes, alternate screen, scroll regions, title/bell/clipboard callbacks, bracketed paste, and a `WcWidth` equivalent. The current Flutter terminal controller is bridged through `lib/terminal/terminal_emulator_adapter.dart` without changing PTY or Android lifecycle code. Validation command: `flutter test test/terminal/ --reporter=expanded`.
 
 ### PHASE 3 — Terminal View & Rendering Engine
 

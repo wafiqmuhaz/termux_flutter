@@ -8,8 +8,12 @@ Current Flutter implementation:
 
 - `lib/main.dart` creates `TermuxFlutterApp`, owns one `TerminalController`, and renders one `TerminalWidget`.
 - `lib/platform/shell_bridge.dart` exposes `MethodChannel('com.termux.flutter/shell')` and `EventChannel('com.termux.flutter/output')`.
-- `lib/terminal/ansi_parser.dart` parses a small subset of CSI sequences: SGR colors, clear screen, cursor movement.
-- `lib/terminal/terminal_buffer.dart` stores simple lines/cells and cursor position.
+- `lib/core/terminal/terminal_emulator.dart` parses PTY bytes into a renderer-neutral VT100/xterm screen model.
+- `lib/core/terminal/screen_model.dart`, `screen_cell.dart`, `text_attributes.dart`, and `color_attribute.dart` store terminal cells, attributes, cursor, scroll margins, scrollback, and alternate screen state without Flutter dependencies.
+- `lib/core/terminal/wc_width.dart` provides Unicode width behavior for ASCII, combining marks, CJK, and emoji.
+- `lib/terminal/terminal_emulator_adapter.dart` adapts the new core model into the existing Flutter `TerminalBuffer` painter bridge until the Phase 3 renderer replaces it.
+- `lib/terminal/ansi_parser.dart` remains as a legacy reference but is no longer on the live terminal output path.
+- `lib/terminal/terminal_buffer.dart` stores simple lines/cells for the current painter adapter.
 - `lib/terminal/terminal_widget.dart` renders with `CustomPainter`, uses a hidden `EditableText` for Android IME, and forwards input to the controller.
 - `android/app/src/main/java/com/termux/flutter/MainActivity.java` registers the platform channels and a legacy Android mouse-cursor workaround.
 - `android/app/src/main/java/com/termux/flutter/ShellEngine.java` starts the process through `BootstrapInstaller`, `PtyProcess`, and pipe fallback.
@@ -48,8 +52,10 @@ flowchart TD
     PTY --> JNI
     JNI --> PP
     PP --> EC[EventChannel com.termux.flutter/output]
-    EC --> AP[AnsiParser.dart]
-    AP --> TB[TerminalBuffer.dart]
+    EC --> EMU[lib/core/terminal TerminalEmulator]
+    EMU --> SMODEL[ScreenModel and ScreenCell grid]
+    SMODEL --> ADAPT[terminal_emulator_adapter.dart]
+    ADAPT --> TB[TerminalBuffer.dart]
     TB --> TP[CustomPainter in TerminalWidget]
 ```
 
@@ -109,9 +115,9 @@ Failure points in this flow:
 2. `BootstrapManager` verifies `$PREFIX` and `$HOME` under `context.filesDir`.
 3. `SessionManager` requests a new `TerminalSession` with shell path `$PREFIX/bin/bash`.
 4. Native PTY manager opens `/dev/ptmx`, applies `IUTF8`, disables `IXON/IXOFF`, sets window size, forks, clears inherited fds, applies env, chdirs to `$HOME`, and execs shell.
-5. PTY output streams into a Dart VT emulator through binary chunks, not lossy `String` fragments.
-6. Emulator mutates screen and transcript models.
-7. Flutter renderer paints rows, selections, cursor, composing text, and color palette.
+5. PTY output streams into a Dart VT emulator through binary chunks, with the current adapter accepting channel strings until the platform API is fully binary end-to-end.
+6. Emulator mutates renderer-neutral `ScreenModel` and transcript models.
+7. Flutter renderer paints rows, selections, cursor, composing text, and color palette from model state.
 8. Input layer maps IME text, extra keys, hardware keys, mouse tracking, paste, and shortcuts into terminal byte sequences.
 
 ## Component Map
@@ -121,7 +127,9 @@ Failure points in this flow:
 | `TermuxFlutterApp` | App root and single terminal controller owner | `lib/main.dart` | `TermuxActivity.java` |
 | `TerminalWidget` | Flutter terminal view, IME focus, paint loop | `lib/terminal/terminal_widget.dart` | `TerminalView.java`, `TerminalRenderer.java` |
 | `TerminalController` | Starts shell, receives output, forwards input | `lib/terminal/terminal_controller.dart` | `TerminalSession.java` |
-| `AnsiParser` | Minimal ANSI parser | `lib/terminal/ansi_parser.dart` | `TerminalEmulator.java` |
+| `TerminalEmulator` | VT100/xterm parser and screen state | `lib/core/terminal/terminal_emulator.dart` | `TerminalEmulator.java` |
+| `ScreenModel` | Renderer-neutral cells, cursor, scrollback, margins | `lib/core/terminal/screen_model.dart` | `TerminalBuffer.java`, `TerminalRow.java` |
+| `AnsiParser` | Legacy minimal ANSI parser, no longer live output path | `lib/terminal/ansi_parser.dart` | `TerminalEmulator.java` |
 | `TerminalBuffer` | Minimal line/cell buffer | `lib/terminal/terminal_buffer.dart` | `TerminalBuffer.java`, `TerminalRow.java` |
 | `ShellBridge` | Dart MethodChannel/EventChannel wrapper | `lib/platform/shell_bridge.dart` | Not applicable; upstream is direct Java |
 | `MainActivity` | Flutter engine channel registration | `android/app/src/main/java/com/termux/flutter/MainActivity.java` | `TermuxActivity.java` |
@@ -188,7 +196,7 @@ sequenceDiagram
 | Feature | Upstream Termux | termux_flutter current status | Root cause | Migration strategy |
 | --- | --- | --- | --- | --- |
 | PTY creation | Mature JNI in `termux.c` | Basic custom PTY in `pty_bridge.c` | Missing Termux termios/fd cleanup parity | Port `termux.c` semantics or wrap upstream module |
-| VT100/xterm | Full `TerminalEmulator` tests | Very small ANSI parser | Parser only handles a few CSI commands | Use `xterm` package or port upstream emulator tests/features |
+| VT100/xterm | Full `TerminalEmulator` tests | Pure Dart emulator core with upstream-derived tests | Previous parser only handled a few CSI commands | Continue expanding Dart port against upstream tests during renderer integration |
 | Rendering | `TerminalView` and `TerminalRenderer` | `CustomPainter` simple cells | No width, selection, alternate screen, truecolor | Replace with real terminal renderer model |
 | Bootstrap | Native embedded bootstrap with symlink manifest | Asset zip loader only | No real bootstrap assets; symlink support incomplete | Port `TermuxInstaller` behavior and artifact pipeline |
 | Package manager | `pkg`, `apt`, `dpkg` in `$PREFIX` | Not present unless asset supplied | No rootfs/prefix content | Ship compatible bootstrap per ABI/API |
