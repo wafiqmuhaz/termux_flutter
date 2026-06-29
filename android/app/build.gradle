@@ -1,0 +1,49 @@
+plugins {
+    id "com.android.application"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def legacyDeviceMinSdk = 21
+
+tasks.configureEach { task ->
+    if (task.name.endsWith("MinSdkCheck")) {
+        task.enabled = false
+    }
+}
+
+android {
+    namespace "com.termux.flutter"
+    compileSdkVersion flutter.compileSdkVersion
+
+    defaultConfig {
+        applicationId "com.termux.flutter"
+        minSdkVersion legacyDeviceMinSdk
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c11 -Wall -Wextra -Werror -Os"
+                abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+}
+
+dependencies {
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "junit:junit:4.13.2"
+}
+
+flutter {
+    source "../.."
+}
