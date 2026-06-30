@@ -65,18 +65,13 @@ static int configure_termios(int fd) {
         return -1;
     }
 
-    t.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
-    t.c_oflag &= ~OPOST;
-    t.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
     t.c_cflag &= ~(CSIZE | PARENB);
     t.c_cflag |= CS8;
-    t.c_cc[VMIN] = 1;
-    t.c_cc[VTIME] = 0;
     t.c_iflag |= IUTF8;
     t.c_iflag &= ~(IXON | IXOFF | IXANY);
 
     int result = tcsetattr(fd, TCSANOW, &t);
-    LOGD("tcsetattr(fd=%d raw IUTF8 no-flow) result=%d errno=%d", fd, result, result == 0 ? 0 : errno);
+    LOGD("tcsetattr(fd=%d sane IUTF8 no-flow) result=%d errno=%d", fd, result, result == 0 ? 0 : errno);
     return result;
 }
 
@@ -142,7 +137,8 @@ static int open_pty_master(char *slave_name, size_t slave_name_size) {
 
 JNIEXPORT jintArray JNICALL
 Java_com_termux_flutter_PtyProcess_nativeStart(JNIEnv *env, jclass clazz, jobjectArray command,
-                                               jobjectArray envp, jint cols, jint rows,
+                                               jobjectArray envp, jstring working_directory,
+                                               jint cols, jint rows,
                                                jint cell_width, jint cell_height) {
     (void) clazz;
 
@@ -162,10 +158,14 @@ Java_com_termux_flutter_PtyProcess_nativeStart(JNIEnv *env, jclass clazz, jobjec
 
     char **argv = copy_string_array(env, command);
     char **environment = copy_string_array(env, envp);
+    const char *cwd = working_directory == NULL
+        ? NULL
+        : (*env)->GetStringUTFChars(env, working_directory, NULL);
     if (argv == NULL || argv[0] == NULL || argv[0][0] == '\0') {
         close(master);
         free_string_array(argv);
         free_string_array(environment);
+        if (cwd != NULL) (*env)->ReleaseStringUTFChars(env, working_directory, cwd);
         errno = EINVAL;
         throw_io(env, "invalid shell command");
         return NULL;
@@ -177,6 +177,7 @@ Java_com_termux_flutter_PtyProcess_nativeStart(JNIEnv *env, jclass clazz, jobjec
         close(master);
         free_string_array(argv);
         free_string_array(environment);
+        if (cwd != NULL) (*env)->ReleaseStringUTFChars(env, working_directory, cwd);
         throw_io(env, "fork failed");
         return NULL;
     }
@@ -213,12 +214,16 @@ Java_com_termux_flutter_PtyProcess_nativeStart(JNIEnv *env, jclass clazz, jobjec
             for (char **entry = environment; *entry != NULL; entry++) putenv(*entry);
         }
 
+        if (cwd != NULL && chdir(cwd) != 0) {
+            LOGE("child chdir(%s) failed errno=%d", cwd, errno);
+        }
         execve(argv[0], argv, environ);
         perror("execve");
         _exit(127);
     }
 
     LOGD("parent closing slave=%s after child pid=%d", slave_name, pid);
+    if (cwd != NULL) (*env)->ReleaseStringUTFChars(env, working_directory, cwd);
     free_string_array(argv);
     free_string_array(environment);
 

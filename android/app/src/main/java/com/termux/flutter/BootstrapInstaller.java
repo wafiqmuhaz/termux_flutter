@@ -9,6 +9,7 @@ import android.system.Os;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -44,7 +45,7 @@ final class BootstrapInstaller {
     }
 
     String[] buildCommand() {
-        return new String[]{getShell().getAbsolutePath(), "--login"};
+        return new String[]{getShell().getAbsolutePath(), getStartupScript().getAbsolutePath()};
     }
 
     String[] buildEnvironment() {
@@ -52,6 +53,7 @@ final class BootstrapInstaller {
         String home = homeDir.getAbsolutePath();
         return new String[]{
             "TERM=xterm-256color",
+            "COLORTERM=truecolor",
             "HOME=" + home,
             "PREFIX=" + prefix,
             "TMPDIR=" + tmpDir.getAbsolutePath(),
@@ -59,9 +61,18 @@ final class BootstrapInstaller {
             "PATH=" + prefix + "/bin:" + prefix + "/bin/applets:/system/bin",
             "LD_LIBRARY_PATH=" + prefix + "/lib",
             "LANG=en_US.UTF-8",
+            "TERMUX_VERSION=0.118.3",
             "ANDROID_ROOT=/system",
             "ANDROID_DATA=/data"
         };
+    }
+
+    String getHomeDirectory() {
+        return homeDir.getAbsolutePath();
+    }
+
+    private File getStartupScript() {
+        return new File(homeDir, ".termux-flutter-startup.sh");
     }
 
     void ensureInstalled(ShellEngine.OutputListener listener) throws IOException {
@@ -71,6 +82,9 @@ final class BootstrapInstaller {
         File shell = getShell();
         if (shell.isFile() && installedBootstrapMatchesDevice()) {
             shell.setExecutable(true, false);
+            File login = new File(prefixDir, "bin/login");
+            if (login.isFile()) login.setExecutable(true, false);
+            writeStartupScript();
             return;
         }
 
@@ -98,19 +112,46 @@ final class BootstrapInstaller {
             throw new IOException("bootstrap installed but usr/bin/bash was not found");
         }
         shell.setExecutable(true, false);
+        File login = new File(prefixDir, "bin/login");
+        if (login.isFile()) login.setExecutable(true, false);
+        writeStartupScript();
         writeBootstrapMarker();
+    }
+
+    private void writeStartupScript() throws IOException {
+        File script = getStartupScript();
+        File parent = script.getParentFile();
+        if (parent != null) parent.mkdirs();
+
+        OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(script), "UTF-8");
+        try {
+            writer.write("#!" + getShell().getAbsolutePath() + "\n");
+            writer.write("echo '[termux_flutter startup]'\n");
+            writer.write("echo \"HOME=$HOME\"\n");
+            writer.write("echo \"PREFIX=$PREFIX\"\n");
+            writer.write("echo \"SHELL=$SHELL\"\n");
+            writer.write("echo \"PATH=$PATH\"\n");
+            writer.write("echo \"PWD=$(pwd)\"\n");
+            writer.write("echo \"BASH_VERSION=$BASH_VERSION\"\n");
+            writer.write("echo '[starting interactive bash]'\n");
+            writer.write("exec \"$SHELL\" --noprofile --norc -i\n");
+        } finally {
+            writer.close();
+        }
+        script.setExecutable(true, false);
     }
 
     private String findBootstrapAsset() {
         AssetManager assets = context.getAssets();
         String family = requiredBootstrapFamily();
         for (String abi : Build.SUPPORTED_ABIS) {
+            String arch = termuxArchForAbi(abi);
             String[] candidates = new String[]{
                 BOOTSTRAP_DIR + "/" + family + "/" + abi + ".zip",
                 BOOTSTRAP_DIR + "/" + abi + "." + family + ".zip",
-                BOOTSTRAP_DIR + "/" + family + "/bootstrap-" + termuxArchForAbi(abi) + ".zip",
+                BOOTSTRAP_DIR + "/" + family + "/bootstrap-" + arch + ".zip",
                 BOOTSTRAP_DIR + "/" + abi + ".zip",
-                BOOTSTRAP_DIR + "/bootstrap-" + termuxArchForAbi(abi) + ".zip"
+                BOOTSTRAP_DIR + "/bootstrap-" + arch + ".zip"
             };
             for (String assetName : candidates) {
                 if (assetName.endsWith("null.zip")) continue;
@@ -152,15 +193,6 @@ final class BootstrapInstaller {
         return null;
     }
 
-    private String supportedAbiList() {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < Build.SUPPORTED_ABIS.length; i++) {
-            if (i > 0) builder.append(", ");
-            builder.append(Build.SUPPORTED_ABIS[i]);
-        }
-        return builder.toString();
-    }
-
     private String expectedAssetList() {
         StringBuilder builder = new StringBuilder();
         String family = requiredBootstrapFamily();
@@ -189,9 +221,7 @@ final class BootstrapInstaller {
 
     private boolean installedBootstrapMatchesDevice() {
         File marker = new File(prefixDir, BOOTSTRAP_MARKER);
-        if (!marker.isFile()) {
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N;
-        }
+        if (!marker.isFile()) return false;
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(new java.io.FileInputStream(marker)));
             try {
@@ -284,14 +314,17 @@ final class BootstrapInstaller {
     }
 
     private void readSymlinks(InputStream input, List<Symlink> symlinks) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
         String line;
         while ((line = reader.readLine()) != null) {
-            String[] parts = line.split("←", 2);
-            if (parts.length != 2) {
+            int separator = line.indexOf('\u2190');
+            if (separator <= 0 || separator == line.length() - 1) {
                 throw new IOException("malformed bootstrap symlink line: " + line);
             }
-            symlinks.add(new Symlink(parts[0], parts[1]));
+            symlinks.add(new Symlink(
+                line.substring(0, separator),
+                line.substring(separator + 1)
+            ));
         }
     }
 

@@ -44,3 +44,10 @@ Current bundled arm64-v8a asset:
 - SHA-256: ea2aeba8819e517db711f8c32369e89e7c52cee73e07930ff91185e1ab93f4f3
 - Compatibility: Android 7/API 24 and newer only. Android 5/6 devices need an `android-5` bootstrap built with
   binaries compatible with the old linker.
+
+Current bundled Android-5 arm64-v8a asset:
+
+- Path: `android-5/arm64-v8a.zip`
+- Source: https://github.com/termux/termux-packages/releases/download/bootstrap-2021.02.19-r1/bootstrap-aarch64.zip
+- SHA-256: 1e3d80bd8cc8771715845ab4a1e67fc125d84c4deda3a1a435116fe4d1f86160
+- Compatibility: Android 5/API 21 through Android 6/API 23.

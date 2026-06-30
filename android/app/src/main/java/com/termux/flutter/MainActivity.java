@@ -82,6 +82,11 @@ public class MainActivity extends FlutterActivity {
                             result.notImplemented();
                         }
                     } catch (Throwable t) {
+                        if (eventSink != null) {
+                            eventSink.success(ShellEngine.utf8(
+                                "\r\n[shell error] " + t.getMessage() + "\r\n"
+                            ));
+                        }
                         result.error("shell_error", t.getMessage(), null);
                     }
                 }

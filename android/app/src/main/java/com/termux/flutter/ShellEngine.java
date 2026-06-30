@@ -23,11 +23,17 @@ public final class ShellEngine {
     public synchronized void start() throws IOException {
         if (isRunning()) return;
 
+        listener.onOutput(utf8("[starting Termux shell]\r\n"));
         bootstrapInstaller.ensureInstalled(listener);
 
         ptyProcess = new PtyProcess(listener);
         try {
-            ptyProcess.start(bootstrapInstaller.buildCommand(), bootstrapInstaller.buildEnvironment());
+            ptyProcess.start(
+                bootstrapInstaller.buildCommand(),
+                bootstrapInstaller.buildEnvironment(),
+                bootstrapInstaller.getHomeDirectory()
+            );
+            listener.onOutput(utf8("[PTY shell started]\r\n"));
         } catch (IOException | RuntimeException ptyFailure) {
             ptyProcess = null;
             throw new IOException("PTY startup failed; interactive pipe fallback is disabled", ptyFailure);

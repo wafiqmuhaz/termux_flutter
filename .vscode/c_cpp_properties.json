@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "android-arm64-v8a",
+      "compilerPath": "${env:LOCALAPPDATA}/Android/Sdk/ndk/29.0.13846066/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd",
+      "compileCommands": "${workspaceFolder}/build/app/intermediates/cxx/Debug/*/arm64-v8a/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/android/app/src/main/cpp",
+        "${env:LOCALAPPDATA}/Android/Sdk/ndk/29.0.13846066/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include",
+        "${env:LOCALAPPDATA}/Android/Sdk/ndk/29.0.13846066/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/aarch64-linux-android"
+      ],
+      "defines": [
+        "__ANDROID__",
+        "__ANDROID_API__=21"
+      ],
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "linux-clang-arm64"
+    }
+  ],
+  "version": 4
+}

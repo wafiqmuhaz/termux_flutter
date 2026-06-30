@@ -26,8 +26,8 @@ public final class PtyProcess {
         this.listener = listener;
     }
 
-    public void start(String[] command, String[] environment) throws IOException {
-        int[] result = nativeStart(command, environment, cols, rows, cellWidth, cellHeight);
+    public void start(String[] command, String[] environment, String workingDirectory) throws IOException {
+        int[] result = nativeStart(command, environment, workingDirectory, cols, rows, cellWidth, cellHeight);
         masterFd = result[0];
         childPid = result[1];
         startReader();
@@ -104,7 +104,7 @@ public final class PtyProcess {
         thread.start();
     }
 
-    private static native int[] nativeStart(String[] command, String[] env, int cols, int rows, int cellWidth, int cellHeight) throws IOException;
+    private static native int[] nativeStart(String[] command, String[] env, String workingDirectory, int cols, int rows, int cellWidth, int cellHeight) throws IOException;
     private static native int nativeRead(int fd, byte[] buffer, int length);
     private static native int nativeWrite(int fd, byte[] buffer, int length);
     private static native int nativeResize(int fd, int cols, int rows, int cellWidth, int cellHeight);
