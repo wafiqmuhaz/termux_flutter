@@ -19,6 +19,9 @@ import java.util.zip.ZipInputStream;
 
 final class BootstrapInstaller {
     private static final String BOOTSTRAP_DIR = "bootstrap";
+    private static final String BOOTSTRAP_FAMILY_ANDROID_5 = "android-5";
+    private static final String BOOTSTRAP_FAMILY_ANDROID_7 = "android-7";
+    private static final String BOOTSTRAP_MARKER = ".bootstrap-api-family";
 
     private final Context context;
     private final File filesDir;
@@ -66,7 +69,7 @@ final class BootstrapInstaller {
         tmpDir.mkdirs();
 
         File shell = getShell();
-        if (shell.isFile()) {
+        if (shell.isFile() && installedBootstrapMatchesDevice()) {
             shell.setExecutable(true, false);
             return;
         }
@@ -76,9 +79,11 @@ final class BootstrapInstaller {
             listener.onOutput(ShellEngine.utf8(
                 "\r\n[bootstrap missing]\r\n" +
                 "This app no longer starts /system/bin/sh as a fake Termux shell.\r\n" +
-                "Add a Termux-compatible bootstrap zip for this device ABI at:\r\n" +
-                "  android/app/src/main/assets/bootstrap/<abi>.zip\r\n" +
-                "For this device, expected one of: " + supportedAbiList() + "\r\n\r\n"
+                "Android " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT +
+                " requires a Termux " + requiredBootstrapFamily() + " bootstrap.\r\n" +
+                "Add a compatible zip for this device ABI at one of:\r\n" +
+                expectedAssetList() +
+                "Bundled apt.android-7 bootstraps cannot run on Android 5/6 and fail with missing DT_HASH.\r\n\r\n"
             ));
             throw new IOException("Termux bootstrap asset is missing");
         }
@@ -93,17 +98,23 @@ final class BootstrapInstaller {
             throw new IOException("bootstrap installed but usr/bin/bash was not found");
         }
         shell.setExecutable(true, false);
+        writeBootstrapMarker();
     }
 
     private String findBootstrapAsset() {
         AssetManager assets = context.getAssets();
+        String family = requiredBootstrapFamily();
         for (String abi : Build.SUPPORTED_ABIS) {
             String[] candidates = new String[]{
+                BOOTSTRAP_DIR + "/" + family + "/" + abi + ".zip",
+                BOOTSTRAP_DIR + "/" + abi + "." + family + ".zip",
+                BOOTSTRAP_DIR + "/" + family + "/bootstrap-" + termuxArchForAbi(abi) + ".zip",
                 BOOTSTRAP_DIR + "/" + abi + ".zip",
                 BOOTSTRAP_DIR + "/bootstrap-" + termuxArchForAbi(abi) + ".zip"
             };
             for (String assetName : candidates) {
                 if (assetName.endsWith("null.zip")) continue;
+                if (!assetMatchesDeviceFamily(assetName)) continue;
                 try {
                     InputStream ignored = assets.open(assetName);
                     ignored.close();
@@ -114,6 +125,23 @@ final class BootstrapInstaller {
             }
         }
         return null;
+    }
+
+    private boolean assetMatchesDeviceFamily(String assetName) {
+        String family = requiredBootstrapFamily();
+        if (assetName.contains(BOOTSTRAP_FAMILY_ANDROID_5)) {
+            return BOOTSTRAP_FAMILY_ANDROID_5.equals(family);
+        }
+        if (assetName.contains(BOOTSTRAP_FAMILY_ANDROID_7)) {
+            return BOOTSTRAP_FAMILY_ANDROID_7.equals(family);
+        }
+        return BOOTSTRAP_FAMILY_ANDROID_7.equals(family);
+    }
+
+    private String requiredBootstrapFamily() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.N
+            ? BOOTSTRAP_FAMILY_ANDROID_5
+            : BOOTSTRAP_FAMILY_ANDROID_7;
     }
 
     private String termuxArchForAbi(String abi) {
@@ -131,6 +159,59 @@ final class BootstrapInstaller {
             builder.append(Build.SUPPORTED_ABIS[i]);
         }
         return builder.toString();
+    }
+
+    private String expectedAssetList() {
+        StringBuilder builder = new StringBuilder();
+        String family = requiredBootstrapFamily();
+        for (String abi : Build.SUPPORTED_ABIS) {
+            String arch = termuxArchForAbi(abi);
+            builder.append("  android/app/src/main/assets/bootstrap/")
+                .append(family)
+                .append("/")
+                .append(abi)
+                .append(".zip\r\n");
+            if (arch != null) {
+                builder.append("  android/app/src/main/assets/bootstrap/")
+                    .append(family)
+                    .append("/bootstrap-")
+                    .append(arch)
+                    .append(".zip\r\n");
+            }
+            builder.append("  android/app/src/main/assets/bootstrap/")
+                .append(abi)
+                .append(".")
+                .append(family)
+                .append(".zip\r\n");
+        }
+        return builder.toString();
+    }
+
+    private boolean installedBootstrapMatchesDevice() {
+        File marker = new File(prefixDir, BOOTSTRAP_MARKER);
+        if (!marker.isFile()) {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N;
+        }
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(new java.io.FileInputStream(marker)));
+            try {
+                return requiredBootstrapFamily().equals(reader.readLine());
+            } finally {
+                reader.close();
+            }
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private void writeBootstrapMarker() throws IOException {
+        File marker = new File(prefixDir, BOOTSTRAP_MARKER);
+        FileOutputStream out = new FileOutputStream(marker);
+        try {
+            out.write(requiredBootstrapFamily().getBytes("UTF-8"));
+        } finally {
+            out.close();
+        }
     }
 
     private void extractBootstrap(String assetName) throws IOException {

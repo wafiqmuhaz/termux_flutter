@@ -4,18 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:termux_flutter/core/terminal/terminal_emulator.dart';
 import 'package:termux_flutter/core/terminal_style.dart';
 import 'package:termux_flutter/terminal/terminal_widget.dart';
 
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('terminal render burst stays inside frame budget', (
     tester,
   ) async {
-    assert(kProfileMode, 'Run with flutter drive --profile.');
+    assert(kProfileMode, 'Run benchmark in --profile mode.');
     final emulator = TerminalEmulator(
       columns: 80,
       rows: 24,
@@ -24,7 +23,7 @@ void main() {
     for (var i = 0; i < 1000; i++) {
       emulator.accept('burst line ${i.toString().padLeft(4, '0')} ');
       emulator.accept('\x1b[1;31mred\x1b[0m ');
-      emulator.accept('界 🔥 ─┼\n');
+      emulator.accept('\u754c \u{1f525} \u2500\u253c\n');
     }
 
     final timings = <FrameTiming>[];

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -6,7 +8,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/terminal/screen_cell.dart';
 import '../core/terminal/screen_model.dart';
@@ -246,10 +247,10 @@ class _TerminalWidgetState extends State<TerminalWidget>
   }
 
   Future<void> _loadFontSize() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = await TerminalFontSettings.load();
     if (!mounted) return;
     setState(() {
-      _fontSize = (prefs.getDouble(_fontSizeKey) ?? _fontSize).clamp(
+      _fontSize = (settings[_fontSizeKey] ?? _fontSize).clamp(
         _minFontSize,
         _maxFontSize,
       );
@@ -257,8 +258,9 @@ class _TerminalWidgetState extends State<TerminalWidget>
   }
 
   Future<void> _saveFontSize() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_fontSizeKey, _fontSize);
+    final settings = await TerminalFontSettings.load();
+    settings[_fontSizeKey] = _fontSize;
+    await TerminalFontSettings.save(settings);
   }
 
   void _handleTextInput(String value) {
@@ -505,6 +507,40 @@ final class TerminalMetrics {
       cellWidth: painter.width.ceilToDouble(),
       cellHeight: math.max(fontSize + 4, line.height.ceilToDouble()),
       baseline: line.baseline,
+    );
+  }
+}
+
+final class TerminalFontSettings {
+  const TerminalFontSettings._();
+
+  static Future<Map<String, double>> load() async {
+    final file = await _file();
+    if (!await file.exists()) return <String, double>{};
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, Object?>) return <String, double>{};
+      return decoded.map((key, value) {
+        final numeric = value is num ? value.toDouble() : null;
+        return MapEntry(key, numeric ?? 14);
+      });
+    } on FormatException {
+      return <String, double>{};
+    } on FileSystemException {
+      return <String, double>{};
+    }
+  }
+
+  static Future<void> save(Map<String, double> values) async {
+    final file = await _file();
+    await file.parent.create(recursive: true);
+    await file.writeAsString(jsonEncode(values));
+  }
+
+  static Future<File> _file() async {
+    final root = Directory.systemTemp;
+    return File(
+      '${root.path}${Platform.pathSeparator}termux_flutter_terminal.json',
     );
   }
 }
